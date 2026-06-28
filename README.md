@@ -24,6 +24,37 @@ Save directly into an Obsidian vault:
 uv run webclip save "https://example.org" --vault "/path/to/YourVault"
 ```
 
+How it works:
+
+- `--vault` sets the base directory to your vault path.
+- Output is written under `Clippings/{site}/{slug}` by default.
+- You can override this layout with `--directory`, for example:
+
+```bash
+uv run webclip save "https://example.org/post/1" \
+  --vault "/path/to/YourVault" \
+  --directory "WebClips/{site}/{slug}"
+```
+
+Default output structure:
+
+```text
+<vault>/
+└── Clippings/
+    └── <site>/
+        └── <slug>/
+            ├── index.md
+            ├── source.json
+            ├── print.html        # when --format includes html
+            ├── article.pdf       # when --format includes pdf
+            └── notes.md
+```
+
+Notes:
+
+- `notes.md` is created automatically for Obsidian flow.
+- On `update`, generated files are refreshed according to mode, while `notes.md` is preserved.
+
 Inspect extraction results:
 
 ```bash
