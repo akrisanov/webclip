@@ -25,6 +25,7 @@ webclip = "webclip.cli:app"
 [dependency-groups]
 dev = [
   "pytest>=8.4.1",
+  "pytest-asyncio>=1.2.0",
   "pytest-cov>=6.2.1",
   "ruff>=0.12.1",
   "ty>=0.0.1a13",
@@ -44,4 +45,3 @@ testpaths = ["tests"]
 [tool.ty.environment]
 python = "./.venv"
 python-version = "3.14"
-

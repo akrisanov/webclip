@@ -11,7 +11,12 @@ from rich.table import Table
 from webclip.auth import profile_dir_for_site, resolve_login_url, run_auth_session
 from webclip.diagnostics import run_doctor
 from webclip.registry import AdapterRegistry
-from webclip.service import SUPPORTED_FETCHERS, SUPPORTED_FORMATS, WebclipService
+from webclip.service import (
+    SUPPORTED_FETCHERS,
+    SUPPORTED_FORMATS,
+    SUPPORTED_UPDATE_MODES,
+    WebclipService,
+)
 
 app = typer.Typer(help="Extensible web clipping CLI for Obsidian")
 adapters_app = typer.Typer(help="Manage and inspect registered adapters")
@@ -55,10 +60,25 @@ def update(
     archive_path: Path,
     mode: Annotated[str, typer.Option("--mode")] = "merge",
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    fetcher: Annotated[str, typer.Option("--fetcher")] = "http",
+    auth_site: Annotated[str | None, typer.Option("--auth-site")] = None,
 ) -> None:
-    console.print("[yellow]Not implemented yet:[/yellow] update pipeline")
-    console.print({"archive_path": str(archive_path), "mode": mode, "dry_run": dry_run})
-    raise typer.Exit(code=1)
+    update_mode = _parse_update_mode(mode)
+    fetcher_kind = _parse_fetcher(fetcher)
+    profile_dir = profile_dir_for_site(auth_site) if auth_site else None
+    service = WebclipService(fetcher_kind=fetcher_kind, profile_dir=profile_dir)
+    result = asyncio.run(
+        service.update(
+            archive_path=archive_path,
+            mode=update_mode,
+            dry_run=dry_run,
+        )
+    )
+    action = "Planned files" if dry_run else "Updated files"
+    console.print(f"{action}:")
+    for file_path in result.files:
+        console.print(f"  - {file_path}")
+    console.print(f"Added comments: {result.added_comments}")
 
 
 @app.command()
@@ -152,6 +172,16 @@ def _parse_fetcher(raw_value: str) -> str:
             f"Unsupported fetcher: {fetcher_kind}. Supported: {supported}"
         )
     return fetcher_kind
+
+
+def _parse_update_mode(raw_value: str) -> str:
+    update_mode = raw_value.strip().lower()
+    if update_mode not in SUPPORTED_UPDATE_MODES:
+        supported = ", ".join(sorted(SUPPORTED_UPDATE_MODES))
+        raise typer.BadParameter(
+            f"Unsupported update mode: {update_mode}. Supported: {supported}"
+        )
+    return update_mode
 
 
 if __name__ == "__main__":

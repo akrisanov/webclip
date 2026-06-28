@@ -30,4 +30,5 @@ just check
 uv run webclip auth vas3k
 uv run webclip save "https://vas3k.club/post/1941225/" --fetcher browser --auth-site vas3k
 uv run webclip save "https://example.org" --format md,json,html,pdf
+uv run webclip update ./Clippings/example.org/example-domain --mode append --dry-run
 ```

@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 
 from webclip.cli import app
 from webclip.diagnostics import CheckResult
+from webclip.service import UpdateResult
 
 runner = CliRunner()
 HTTP_URL = TypeAdapter(HttpUrl)
@@ -31,6 +32,11 @@ def test_save_rejects_unsupported_format() -> None:
 
 def test_save_rejects_unsupported_fetcher() -> None:
     result = runner.invoke(app, ["save", "https://example.org", "--fetcher", "playwright"])
+    assert result.exit_code == 2
+
+
+def test_update_rejects_unsupported_mode() -> None:
+    result = runner.invoke(app, ["update", "/tmp/archive", "--mode", "invalid"])
     assert result.exit_code == 2
 
 
@@ -103,3 +109,30 @@ def test_doctor_reports_results(monkeypatch: MonkeyPatch) -> None:
     result = runner.invoke(app, ["doctor"])
     assert result.exit_code == 1
     assert "Playwright Chromium" in result.stdout
+
+
+def test_update_reports_planned_files(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+    async def fake_update(
+        self,
+        archive_path: Path,
+        mode: str,
+        dry_run: bool = False,
+    ) -> UpdateResult:
+        return UpdateResult(
+            mode=mode,
+            source_url="https://example.org/post",
+            target_dir=archive_path,
+            dry_run=dry_run,
+            files=[archive_path / "index.md", archive_path / "source.json"],
+            added_comments=2,
+        )
+
+    monkeypatch.setattr("webclip.cli.WebclipService.update", fake_update)
+    result = runner.invoke(
+        app,
+        ["update", str(tmp_path), "--mode", "append", "--dry-run"],
+    )
+
+    assert result.exit_code == 0
+    assert "Planned files" in result.stdout
+    assert "Added comments: 2" in result.stdout
