@@ -5,6 +5,7 @@ from pytest import MonkeyPatch
 from typer.testing import CliRunner
 
 from webclip.cli import app
+from webclip.diagnostics import CheckResult
 
 runner = CliRunner()
 HTTP_URL = TypeAdapter(HttpUrl)
@@ -88,3 +89,16 @@ def test_auth_uses_profile_and_known_login_url(monkeypatch: MonkeyPatch) -> None
     assert captured["site"] == "vas3k"
     assert captured["login_url"] == "https://vas3k.club/auth/login/"
     assert "profiles/vas3k" in captured["profile_dir"]
+
+
+def test_doctor_reports_results(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "webclip.cli.run_doctor",
+        lambda vault: [
+            CheckResult(name="Python version", ok=True, details="3.14"),
+            CheckResult(name="Playwright Chromium", ok=False, details="missing"),
+        ],
+    )
+    result = runner.invoke(app, ["doctor"])
+    assert result.exit_code == 1
+    assert "Playwright Chromium" in result.stdout

@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from webclip.auth import profile_dir_for_site, resolve_login_url, run_auth_session
+from webclip.diagnostics import run_doctor
 from webclip.registry import AdapterRegistry
 from webclip.service import SUPPORTED_FETCHERS, SUPPORTED_FORMATS, WebclipService
 
@@ -111,9 +112,21 @@ def adapters_list() -> None:
 
 
 @app.command()
-def doctor() -> None:
-    console.print("[yellow]Not implemented yet:[/yellow] environment diagnostics")
-    raise typer.Exit(code=1)
+def doctor(vault: Annotated[Path | None, typer.Option("--vault")] = None) -> None:
+    results = run_doctor(vault=vault)
+    table = Table(title="webclip doctor")
+    table.add_column("Check")
+    table.add_column("Status")
+    table.add_column("Details")
+    has_failures = False
+    for result in results:
+        status = "[green]OK[/green]" if result.ok else "[red]FAIL[/red]"
+        if not result.ok:
+            has_failures = True
+        table.add_row(result.name, status, result.details)
+    console.print(table)
+    if has_failures:
+        raise typer.Exit(code=1)
 
 
 def _parse_formats(raw_value: str) -> set[str]:
