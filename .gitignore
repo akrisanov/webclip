@@ -1,0 +1,52 @@
+# OS artifacts (macOS/Linux)
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+*~
+.nfs*
+
+# Editor and IDE
+.idea/
+*.swp
+*.swo
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.pyre/
+.hypothesis/
+
+# Build and packaging
+dist/
+build/
+*.egg-info/
+pip-wheel-metadata/
+
+# Runtime and reports
+*.log
+playwright-state/
+playwright-report/
+test-results/
+
+# Local secrets and env overrides
+.env
+.env.*
+!.env.example

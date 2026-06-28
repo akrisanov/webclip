@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "webclip"
+version = "0.1.0"
+description = "Extensible CLI for clipping web pages into Obsidian"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+  "httpx>=0.28.1",
+  "jinja2>=3.1.6",
+  "playwright>=1.54.0",
+  "pydantic>=2.11.7",
+  "python-slugify>=8.0.4",
+  "rich>=14.0.0",
+  "selectolax>=0.3.29",
+  "typer>=0.16.0",
+]
+
+[project.scripts]
+webclip = "webclip.cli:app"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.4.1",
+  "pytest-cov>=6.2.1",
+  "ruff>=0.12.1",
+  "ty>=0.0.1a13",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "A", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ty.environment]
+python = "./.venv"
+python-version = "3.14"
+
