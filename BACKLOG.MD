@@ -27,6 +27,6 @@
 ## Stage 4 — Update and plugin architecture
 
 - [x] Implement update modes (`append`, `merge`, `replace`) with `--dry-run`.
-- [ ] Preserve user notes on update.
+- [x] Preserve user notes on update.
 - [ ] Add plugin discovery via entry points.
 - [ ] Add declarative adapter loading.

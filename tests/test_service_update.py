@@ -52,3 +52,28 @@ async def test_update_append_adds_only_new_comments(
     assert result.added_comments == 1
     updated = Document.model_validate_json((archive / "source.json").read_text(encoding="utf-8"))
     assert [comment.comment_id for comment in updated.comments] == ["c1", "c2"]
+
+
+@pytest.mark.asyncio
+async def test_update_replace_preserves_notes_file(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    archive = tmp_path / "archive"
+    archive.mkdir(parents=True)
+    (archive / "index.md").write_text("# Existing\n", encoding="utf-8")
+    (archive / "source.json").write_text(
+        _document(["c1"]).model_dump_json(indent=2, exclude_none=True),
+        encoding="utf-8",
+    )
+    notes = archive / "notes.md"
+    notes.write_text("## My notes\n\nDo not overwrite\n", encoding="utf-8")
+
+    async def fake_extract(self, url: str) -> Document:
+        return _document(["c2"])
+
+    monkeypatch.setattr(WebclipService, "extract", fake_extract)
+    service = WebclipService(fetcher_kind="http")
+    await service.update(archive_path=archive, mode="replace", dry_run=False)
+
+    assert notes.read_text(encoding="utf-8") == "## My notes\n\nDo not overwrite\n"
