@@ -2,6 +2,8 @@
 
 Extensible CLI for saving web pages, comments, and assets into Obsidian-friendly archives.
 
+Project layout follows `src/` convention (`src/webclip`).
+
 ## Quick start
 
 ```bash

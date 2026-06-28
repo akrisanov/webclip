@@ -2,6 +2,17 @@
 requires = ["hatchling>=1.27.0"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/webclip"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/webclip",
+  "tests",
+  "README.md",
+  "pyproject.toml",
+]
+
 [project]
 name = "webclip"
 version = "0.1.0"
