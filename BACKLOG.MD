@@ -13,7 +13,7 @@
 - [x] Implement HTTP fetcher.
 - [x] Implement Playwright fetcher with persistent auth profile.
 - [x] Implement generic adapter.
-- [ ] Implement `vas3k.club` adapter for article/comments/assets extraction.
+- [x] Implement `vas3k.club` adapter for article/comments/assets extraction.
 
 ## Stage 3 — Rendering and outputs
 

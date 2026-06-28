@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 from webclip.adapters.base import SiteAdapter
 from webclip.adapters.generic import GenericAdapter
+from webclip.adapters.vas3k import Vas3kAdapter
 
 
 @dataclass(frozen=True)
@@ -18,11 +19,15 @@ class AdapterRegistry:
     def __init__(self) -> None:
         self._adapters: list[RegisteredAdapter] = [
             RegisteredAdapter(
+                name="vas3k",
+                description="Vas3k.club article/comments adapter",
+                factory=Vas3kAdapter,
+            ),
+            RegisteredAdapter(
                 name="generic",
                 description="Fallback generic HTML adapter",
                 factory=GenericAdapter,
             ),
-            RegisteredAdapter(name="vas3k", description="Vas3k.club article/comments adapter"),
         ]
 
     def list_adapters(self) -> list[RegisteredAdapter]:
