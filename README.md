@@ -1,8 +1,8 @@
 # webclip
 
-`webclip` — CLI для сохранения веб-страниц (контент, комментарии, изображения) в локальный архив или Obsidian.
+`webclip` is a CLI for saving web pages (content, comments, and images) into a local archive or an Obsidian vault.
 
-## Установка
+## Installation
 
 ```bash
 uv venv
@@ -10,46 +10,47 @@ uv sync
 uv run playwright install chromium
 ```
 
-## Быстрый старт
+## Quick start
 
-Сохранить страницу в Markdown + JSON:
+Save a page as Markdown + JSON:
 
 ```bash
 uv run webclip save "https://example.org" --format md,json
 ```
 
-Сохранить в Obsidian Vault:
+Save directly into an Obsidian vault:
 
 ```bash
 uv run webclip save "https://example.org" --vault "/path/to/YourVault"
 ```
 
-Проверить извлечение:
+Inspect extraction results:
 
 ```bash
 uv run webclip inspect "https://example.org"
 ```
 
-## Авторизация (для закрытых страниц)
+## Authentication (for protected pages)
 
 ```bash
 uv run webclip auth vas3k
 uv run webclip save "https://vas3k.club/post/1941225/" --fetcher browser --auth-site vas3k
 ```
 
-## Обновление сохранённого архива
+## Update an existing archive
 
 ```bash
 uv run webclip update ./Clippings/example.org/example-domain --mode append
 uv run webclip update ./Clippings/example.org/example-domain --mode merge --dry-run
 ```
 
-Режимы:
-- `append` — добавить только новые комментарии;
-- `merge` — обновить текущие артефакты;
-- `replace` — полностью пересоздать сгенерированные файлы.
+Modes:
 
-## Полезные команды
+- `append` — add only new comments.
+- `merge` — regenerate current output files from the latest source.
+- `replace` — fully recreate generated files.
+
+## Useful commands
 
 ```bash
 uv run webclip adapters list
