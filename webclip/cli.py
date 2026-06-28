@@ -126,9 +126,10 @@ def adapters_list() -> None:
     registry = AdapterRegistry()
     table = Table(title="Registered adapters")
     table.add_column("Name")
+    table.add_column("Source")
     table.add_column("Description")
     for adapter in registry.list_adapters():
-        table.add_row(adapter.name, adapter.description)
+        table.add_row(adapter.name, adapter.source, adapter.description)
     console.print(table)
 
 

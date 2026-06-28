@@ -34,3 +34,7 @@ def default_config_path() -> Path:
 
 def default_profiles_dir() -> Path:
     return Path.home() / ".config" / "webclip" / "profiles"
+
+
+def default_declarative_adapters_dir() -> Path:
+    return Path.home() / ".config" / "webclip" / "adapters"

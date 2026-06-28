@@ -28,5 +28,5 @@
 
 - [x] Implement update modes (`append`, `merge`, `replace`) with `--dry-run`.
 - [x] Preserve user notes on update.
-- [ ] Add plugin discovery via entry points.
-- [ ] Add declarative adapter loading.
+- [x] Add plugin discovery via entry points.
+- [x] Add declarative adapter loading.
