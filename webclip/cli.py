@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Annotated
 
@@ -8,6 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from webclip.registry import AdapterRegistry
+from webclip.service import SUPPORTED_FORMATS, WebclipService
 
 app = typer.Typer(help="Extensible web clipping CLI for Obsidian")
 adapters_app = typer.Typer(help="Manage and inspect registered adapters")
@@ -23,17 +25,22 @@ def save(
     vault: Annotated[Path | None, typer.Option("--vault")] = None,
     directory: Annotated[str | None, typer.Option("--directory")] = None,
 ) -> None:
-    console.print("[yellow]Not implemented yet:[/yellow] save pipeline")
-    console.print(
-        {
-            "url": url,
-            "format": output_format,
-            "with_comments": with_comments,
-            "vault": str(vault) if vault else None,
-            "directory": directory,
-        }
+    formats = _parse_formats(output_format)
+    base_dir = vault or Path.cwd()
+    directory_template = directory or "Clippings/{site}/{slug}"
+    service = WebclipService()
+    result = asyncio.run(
+        service.save(
+            url=url,
+            output_formats=formats,
+            base_dir=base_dir,
+            directory_template=directory_template,
+            include_comments=with_comments,
+        )
     )
-    raise typer.Exit(code=1)
+    console.print(f"[green]Saved:[/green] {result.output.output_dir}")
+    for file_path in result.output.written_files:
+        console.print(f"  - {file_path}")
 
 
 @app.command()
@@ -49,9 +56,16 @@ def update(
 
 @app.command()
 def inspect(url: str) -> None:
-    console.print("[yellow]Not implemented yet:[/yellow] inspect pipeline")
-    console.print({"url": url})
-    raise typer.Exit(code=1)
+    service = WebclipService()
+    result = asyncio.run(service.inspect(url))
+    console.print(f"Matched adapter: {result.adapter_name}")
+    console.print(f"Fetcher: {result.fetcher_name}")
+    console.print(f"Title: {result.title}")
+    console.print(f"Article blocks: {result.article_blocks}")
+    console.print(f"Comments: {result.comments}")
+    console.print(f"Images: {result.images}")
+    console.print(f"Nested comment depth: {result.nested_comment_depth}")
+    console.print(f"Authentication: {'yes' if result.authentication_required else 'no'}")
 
 
 @app.command()
@@ -83,6 +97,20 @@ def adapters_list() -> None:
 def doctor() -> None:
     console.print("[yellow]Not implemented yet:[/yellow] environment diagnostics")
     raise typer.Exit(code=1)
+
+
+def _parse_formats(raw_value: str) -> set[str]:
+    formats = {entry.strip().lower() for entry in raw_value.split(",") if entry.strip()}
+    if not formats:
+        raise typer.BadParameter("At least one format must be provided via --format")
+    unsupported = formats - SUPPORTED_FORMATS
+    if unsupported:
+        supported = ", ".join(sorted(SUPPORTED_FORMATS))
+        unsupported_values = ", ".join(sorted(unsupported))
+        raise typer.BadParameter(
+            f"Unsupported format(s): {unsupported_values}. Supported: {supported}"
+        )
+    return formats
 
 
 if __name__ == "__main__":
