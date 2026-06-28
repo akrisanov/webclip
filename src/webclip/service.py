@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from base64 import b64encode
 from dataclasses import dataclass, field
 from json import loads
+from mimetypes import guess_type
 from pathlib import Path
 
 import httpx
@@ -104,7 +106,9 @@ class WebclipService:
             include_comments=include_comments,
             theme=theme,
             asset_url_map=localized.url_map,
-            base_href=f"{output_dir.as_uri()}/",
+            base_href=f"{output_dir.resolve().as_uri()}/",
+            pdf_resolve_dir=output_dir,
+            asset_artifacts=localized.artifacts,
         )
         artifacts = {**localized.artifacts, **artifacts}
 
@@ -127,6 +131,8 @@ class WebclipService:
         theme: str = "readable",
         asset_url_map: dict[str, str] | None = None,
         base_href: str | None = None,
+        pdf_resolve_dir: Path | None = None,
+        asset_artifacts: dict[str, bytes] | None = None,
     ) -> dict[str, str | bytes]:
         self._validate_render_options(output_formats=output_formats, theme=theme)
         return await self._build_artifacts(
@@ -136,6 +142,8 @@ class WebclipService:
             theme=theme,
             asset_url_map=asset_url_map or self._asset_map_from_document(document),
             base_href=base_href,
+            pdf_resolve_dir=pdf_resolve_dir,
+            asset_artifacts=asset_artifacts or {},
         )
 
     async def update(
@@ -202,7 +210,9 @@ class WebclipService:
             include_comments=True,
             theme=theme,
             asset_url_map=asset_url_map,
-            base_href=f"{archive_path.as_uri()}/",
+            base_href=f"{archive_path.resolve().as_uri()}/",
+            pdf_resolve_dir=None if dry_run else archive_path,
+            asset_artifacts=localized_artifacts,
         )
         artifacts = {**localized_artifacts, **artifacts}
 
@@ -278,6 +288,8 @@ class WebclipService:
         theme: str,
         asset_url_map: dict[str, str],
         base_href: str | None,
+        pdf_resolve_dir: Path | None,
+        asset_artifacts: dict[str, bytes],
     ) -> dict[str, str | bytes]:
         artifacts: dict[str, str | bytes] = {}
         if "md" in output_formats:
@@ -288,18 +300,31 @@ class WebclipService:
             )
         if "json" in output_formats:
             artifacts["source.json"] = render_document_json(document) + "\n"
-        if "html" in output_formats or "pdf" in output_formats:
-            rendered_html = render_html(
+        if "html" in output_formats:
+            artifacts["print.html"] = render_html(
                 document,
                 include_comments=include_comments,
                 theme=theme,
                 asset_url_map=asset_url_map,
+                base_href=None,
+            )
+        if "pdf" in output_formats:
+            pdf_asset_map = self._build_pdf_asset_map(
+                asset_url_map=asset_url_map,
+                pdf_resolve_dir=pdf_resolve_dir,
+                asset_artifacts=asset_artifacts,
+            )
+            rendered_pdf_html = render_html(
+                document,
+                include_comments=include_comments,
+                theme=theme,
+                asset_url_map=pdf_asset_map,
                 base_href=base_href,
             )
-            if "html" in output_formats:
-                artifacts["print.html"] = rendered_html
-            if "pdf" in output_formats:
-                artifacts["article.pdf"] = await render_pdf_bytes(rendered_html)
+            artifacts["article.pdf"] = await render_pdf_bytes(
+                rendered_pdf_html,
+                resolve_dir=pdf_resolve_dir,
+            )
         return artifacts
 
     def _detect_formats(self, archive_path: Path) -> set[str]:
@@ -365,4 +390,27 @@ class WebclipService:
         for asset in document.assets:
             if asset.local_path is not None:
                 mapping[str(asset.source_url)] = asset.local_path
+        return mapping
+
+    def _build_pdf_asset_map(
+        self,
+        asset_url_map: dict[str, str],
+        pdf_resolve_dir: Path | None,
+        asset_artifacts: dict[str, bytes],
+    ) -> dict[str, str]:
+        if pdf_resolve_dir is None:
+            return asset_url_map
+        mapping = dict(asset_url_map)
+        for source_url, target in asset_url_map.items():
+            if target.startswith(("http://", "https://", "data:", "file://")):
+                continue
+            mime_type = guess_type(Path(target).name)[0] or "application/octet-stream"
+            asset_bytes = asset_artifacts.get(target)
+            if asset_bytes is None:
+                asset_path = pdf_resolve_dir / target
+                if not asset_path.exists() or not asset_path.is_file():
+                    continue
+                asset_bytes = asset_path.read_bytes()
+            encoded = b64encode(asset_bytes).decode("ascii")
+            mapping[source_url] = f"data:{mime_type};base64,{encoded}"
         return mapping

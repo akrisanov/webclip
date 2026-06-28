@@ -98,3 +98,40 @@ async def test_save_reports_failed_assets_and_continues(
     assert result.failed_assets == ["https://cdn.example.org/image.png"]
     markdown = (result.output.output_dir / "index.md").read_text(encoding="utf-8")
     assert "https://cdn.example.org/image.png" in markdown
+
+
+@pytest.mark.asyncio
+async def test_save_pdf_renders_from_output_directory(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+
+    async def fake_extract(self, url: str) -> Document:
+        return _image_document()
+
+    async def fake_fetch_asset(self, url: str) -> tuple[bytes, str | None]:
+        return (b"PNGDATA", "image/png")
+
+    async def fake_pdf(html: str, resolve_dir: Path | None = None) -> bytes:
+        captured["html"] = html
+        captured["resolve_dir"] = str(resolve_dir) if resolve_dir is not None else ""
+        return b"%PDF-1.4"
+
+    monkeypatch.setattr(WebclipService, "extract", fake_extract)
+    monkeypatch.setattr(WebclipService, "_fetch_asset", fake_fetch_asset)
+    monkeypatch.setattr("webclip.service.render_pdf_bytes", fake_pdf)
+
+    service = WebclipService(fetcher_kind="http")
+    result = await service.save(
+        url="https://example.org/post/1",
+        output_formats={"pdf"},
+        base_dir=tmp_path,
+        directory_template="Clippings/{site}/{slug}",
+        include_comments=True,
+    )
+
+    output_dir = result.output.output_dir
+    assert captured["resolve_dir"] == str(output_dir)
+    assert 'src="data:image/png;base64,' in captured["html"]
+    assert (output_dir / "article.pdf").read_bytes() == b"%PDF-1.4"

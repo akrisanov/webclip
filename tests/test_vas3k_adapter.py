@@ -1,5 +1,6 @@
 from webclip.adapters.vas3k import Vas3kAdapter
 from webclip.fetchers.base import FetchResult
+from webclip.models import BlockType
 
 
 def test_vas3k_adapter_matches_domain() -> None:
@@ -15,7 +16,9 @@ def test_vas3k_adapter_extracts_content_and_threaded_comments() -> None:
         <h1 class="post-title">Гайд по релокации</h1>
         <section class="post-text">
           <div class="text-body text-body-type-post e-content">
-            <p>Основной текст поста.</p>
+            <p>Основной <a href="/docs">текст</a> поста.</p>
+            <p><a href="#Oglavlenie">Назад к оглавлению</a></p>
+            <ul><li>Первый пункт</li><li>Второй <a href="https://example.org">пункт</a></li></ul>
             <p><img src="https://i.vas3k.club/post-image.jpg" alt="post image"></p>
           </div>
         </section>
@@ -54,3 +57,12 @@ def test_vas3k_adapter_extracts_content_and_threaded_comments() -> None:
     assert parent.comment_id == "parent-1"
     assert reply.parent_id == "parent-1"
     assert str(document.assets[0].source_url) == "https://i.vas3k.club/post-image.jpg"
+    assert document.content[0].text == "Основной [текст](https://vas3k.club/docs) поста."
+    assert any(
+        (block.text or "") == "[Назад к оглавлению](#oglavlenie)"
+        for block in document.content
+    )
+    list_blocks = [block for block in document.content if block.type == BlockType.list]
+    assert list_blocks
+    assert "- Первый пункт" in (list_blocks[0].text or "")
+    assert "[пункт](https://example.org)" in (list_blocks[0].text or "")

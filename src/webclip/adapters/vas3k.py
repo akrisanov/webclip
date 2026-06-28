@@ -31,6 +31,11 @@ def _node_text(node: Node) -> str:
     return node.text(separator=" ", strip=True)
 
 
+def _normalize_inline_text(value: str) -> str:
+    lines = [" ".join(line.split()) for line in value.splitlines()]
+    return "\n".join(lines).strip()
+
+
 class Vas3kAdapter:
     name = "vas3k"
 
@@ -148,43 +153,120 @@ class Vas3kAdapter:
             return []
 
         blocks: list[ContentBlock] = []
-        for node in root.css("h1,h2,h3,h4,h5,h6,p,blockquote,pre,code,img,li"):
-            tag = node.tag.lower()
-            if tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
-                blocks.append(
-                    ContentBlock(type=BlockType.heading, text=_node_text(node), level=int(tag[1]))
-                )
-                continue
-            if tag in {"p", "li"}:
-                text = _node_text(node)
-                if text:
-                    blocks.append(ContentBlock(type=BlockType.paragraph, text=text))
-                continue
-            if tag == "blockquote":
-                text = _node_text(node)
-                if text:
-                    blocks.append(ContentBlock(type=BlockType.quote, text=text))
-                continue
-            if tag in {"pre", "code"}:
-                text = _node_text(node)
-                if text:
-                    blocks.append(ContentBlock(type=BlockType.code, text=text))
-                continue
-            if tag == "img":
-                src = (node.attributes.get("src") or "").strip()
-                if not src:
-                    continue
-                absolute = urljoin(base_url, src)
-                if urlparse(absolute).scheme not in {"http", "https"}:
-                    continue
-                blocks.append(
-                    ContentBlock(
-                        type=BlockType.image,
-                        url=_to_http_url(absolute),
-                        caption=(node.attributes.get("alt") or "").strip() or None,
-                    )
-                )
+        for node in root.iter():
+            self._collect_blocks_from_node(node=node, base_url=base_url, blocks=blocks)
         return blocks
+
+    def _collect_blocks_from_node(
+        self,
+        node: Node,
+        base_url: str,
+        blocks: list[ContentBlock],
+    ) -> None:
+        tag = node.tag.lower()
+        if tag in {"script", "style"}:
+            return
+        if tag in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+            blocks.append(
+                ContentBlock(
+                    type=BlockType.heading,
+                    text=_node_text(node),
+                    level=int(tag[1]),
+                )
+            )
+            return
+        if tag == "p":
+            text = self._render_inline_markdown(node, base_url)
+            if text:
+                blocks.append(ContentBlock(type=BlockType.paragraph, text=text))
+            for image_node in node.css("img"):
+                self._collect_blocks_from_node(node=image_node, base_url=base_url, blocks=blocks)
+            return
+        if tag in {"ul", "ol"}:
+            lines: list[str] = []
+            for index, item in enumerate(node.css("li"), start=1):
+                item_text = self._render_inline_markdown(item, base_url)
+                if not item_text:
+                    continue
+                prefix = f"{index}. " if tag == "ol" else "- "
+                lines.append(f"{prefix}{item_text}")
+            if lines:
+                blocks.append(ContentBlock(type=BlockType.list, text="\n".join(lines)))
+            return
+        if tag == "blockquote":
+            text = self._render_inline_markdown(node, base_url)
+            if text:
+                blocks.append(ContentBlock(type=BlockType.quote, text=text))
+            return
+        if tag == "pre":
+            text = node.text(separator="\n", strip=True)
+            if text:
+                blocks.append(ContentBlock(type=BlockType.code, text=text))
+            return
+        if tag == "code":
+            parent_tag = node.parent.tag.lower() if node.parent is not None else ""
+            if parent_tag != "pre":
+                return
+            text = node.text(separator="\n", strip=True)
+            if text:
+                blocks.append(ContentBlock(type=BlockType.code, text=text))
+            return
+        if tag == "img":
+            src = (node.attributes.get("src") or "").strip()
+            if not src:
+                return
+            absolute = urljoin(base_url, src)
+            if urlparse(absolute).scheme not in {"http", "https"}:
+                return
+            blocks.append(
+                ContentBlock(
+                    type=BlockType.image,
+                    url=_to_http_url(absolute),
+                    caption=(node.attributes.get("alt") or "").strip() or None,
+                )
+            )
+            return
+        for child in node.iter():
+            self._collect_blocks_from_node(node=child, base_url=base_url, blocks=blocks)
+
+    def _render_inline_markdown(self, node: Node, base_url: str) -> str:
+        chunks: list[str] = []
+        child = node.child
+        while child is not None:
+            tag = child.tag.lower()
+            if tag == "-text":
+                chunks.append(child.text())
+            elif tag == "br":
+                chunks.append("\n")
+            elif tag == "a":
+                rendered = self._render_inline_markdown(child, base_url)
+                label = _normalize_inline_text(rendered or child.text())
+                href = (child.attributes.get("href") or "").strip()
+                if href.startswith("#"):
+                    fragment = href[1:].strip().lower()
+                    target = f"#{fragment}" if fragment else ""
+                else:
+                    target = urljoin(base_url, href) if href else ""
+                if label and target:
+                    chunks.append(f"[{label}]({target})")
+                elif label:
+                    chunks.append(label)
+            elif tag in {"strong", "b"}:
+                value = _normalize_inline_text(self._render_inline_markdown(child, base_url))
+                chunks.append(f"**{value}**" if value else "")
+            elif tag in {"em", "i"}:
+                value = _normalize_inline_text(self._render_inline_markdown(child, base_url))
+                chunks.append(f"*{value}*" if value else "")
+            elif tag == "code":
+                value = _normalize_inline_text(child.text(separator=" ", strip=True))
+                chunks.append(f"`{value}`" if value else "")
+            elif tag == "img":
+                pass
+            else:
+                nested = self._render_inline_markdown(child, base_url)
+                chunks.append(nested or child.text(separator=" ", strip=True))
+            child = child.next
+        return _normalize_inline_text("".join(chunks))
 
     def _extract_assets(self, content: list[ContentBlock], comments: list[Comment]) -> list[Asset]:
         assets: list[Asset] = []

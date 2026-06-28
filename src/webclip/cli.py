@@ -206,6 +206,8 @@ def render(
             output_formats=formats,
             include_comments=include_comments,
             theme=rendered_theme,
+            base_href=f"{target_dir.resolve().as_uri()}/",
+            pdf_resolve_dir=target_dir,
         )
     )
     writer = FilesystemOutput(Path.cwd())
