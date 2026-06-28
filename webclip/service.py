@@ -8,6 +8,7 @@ from webclip.fetchers.http import HttpFetcher
 from webclip.fetchers.playwright import PlaywrightFetcher
 from webclip.models import Document
 from webclip.outputs.filesystem import FilesystemOutput, WriteResult
+from webclip.outputs.obsidian import ObsidianOutput
 from webclip.registry import AdapterRegistry
 from webclip.renderers.html_renderer import render_html
 from webclip.renderers.json_renderer import render_document_json
@@ -54,6 +55,7 @@ class WebclipService:
         base_dir: Path,
         directory_template: str,
         include_comments: bool,
+        use_obsidian_output: bool = False,
     ) -> SaveResult:
         unsupported = output_formats - SUPPORTED_FORMATS
         if unsupported:
@@ -73,7 +75,7 @@ class WebclipService:
             if "pdf" in output_formats:
                 artifacts["article.pdf"] = await render_pdf_bytes(rendered_html)
 
-        writer = FilesystemOutput(base_dir)
+        writer = ObsidianOutput(base_dir) if use_obsidian_output else FilesystemOutput(base_dir)
         output = writer.write(
             document=document,
             directory_template=directory_template,

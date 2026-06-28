@@ -48,6 +48,7 @@ def test_save_writes_report_with_mocked_service(tmp_path: Path, monkeypatch: Mon
         base_dir: Path,
         directory_template: str,
         include_comments: bool,
+        use_obsidian_output: bool = False,
     ) -> SaveResult:
         output_dir = base_dir / "Clippings" / "example.org" / "test"
         return SaveResult(

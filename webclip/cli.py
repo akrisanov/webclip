@@ -42,6 +42,7 @@ def save(
             base_dir=base_dir,
             directory_template=directory_template,
             include_comments=with_comments,
+            use_obsidian_output=vault is not None,
         )
     )
     console.print(f"[green]Saved:[/green] {result.output.output_dir}")

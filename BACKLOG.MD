@@ -22,7 +22,7 @@
 - [x] Implement HTML renderer.
 - [x] Implement PDF renderer (via Playwright print).
 - [x] Implement filesystem output target.
-- [ ] Implement filesystem and Obsidian output targets.
+- [x] Implement filesystem and Obsidian output targets.
 
 ## Stage 4 — Update and plugin architecture
 

@@ -5,6 +5,7 @@ from pydantic import HttpUrl, TypeAdapter
 
 from webclip.models import BlockType, ContentBlock, Document, ExtractionMetadata, Metadata
 from webclip.outputs.filesystem import FilesystemOutput
+from webclip.outputs.obsidian import ObsidianOutput
 from webclip.renderers.html_renderer import render_html
 
 HTTP_URL = TypeAdapter(HttpUrl)
@@ -54,3 +55,23 @@ def test_filesystem_output_writes_text_and_binary(tmp_path: Path) -> None:
     pdf = result.output_dir / "article.pdf"
     assert index.read_text(encoding="utf-8") == "# Hello\n"
     assert pdf.read_bytes() == b"%PDF-1.4"
+
+
+def test_obsidian_output_creates_notes_once(tmp_path: Path) -> None:
+    writer = ObsidianOutput(tmp_path)
+    document = _sample_document()
+    result = writer.write(
+        document=document,
+        directory_template="Clippings/{site}/{slug}",
+        artifacts={"index.md": "# One\n"},
+    )
+    notes = result.output_dir / "notes.md"
+    assert notes.exists()
+    notes.write_text("## My notes\n\nCustom text\n", encoding="utf-8")
+
+    writer.write(
+        document=document,
+        directory_template="Clippings/{site}/{slug}",
+        artifacts={"index.md": "# Two\n"},
+    )
+    assert notes.read_text(encoding="utf-8") == "## My notes\n\nCustom text\n"
