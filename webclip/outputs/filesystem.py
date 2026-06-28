@@ -20,7 +20,7 @@ class FilesystemOutput:
         self,
         document: Document,
         directory_template: str,
-        artifacts: dict[str, str],
+        artifacts: dict[str, str | bytes],
     ) -> WriteResult:
         relative_or_absolute = Path(
             directory_template.format(site=document.metadata.site, slug=document.slug)
@@ -35,7 +35,9 @@ class FilesystemOutput:
         written_files: list[Path] = []
         for filename, content in artifacts.items():
             target = output_dir / filename
-            target.write_text(content, encoding="utf-8")
+            if isinstance(content, bytes):
+                target.write_bytes(content)
+            else:
+                target.write_text(content, encoding="utf-8")
             written_files.append(target)
         return WriteResult(output_dir=output_dir, written_files=written_files)
-

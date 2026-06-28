@@ -9,10 +9,12 @@ from webclip.fetchers.playwright import PlaywrightFetcher
 from webclip.models import Document
 from webclip.outputs.filesystem import FilesystemOutput, WriteResult
 from webclip.registry import AdapterRegistry
+from webclip.renderers.html_renderer import render_html
 from webclip.renderers.json_renderer import render_document_json
 from webclip.renderers.markdown import render_markdown
+from webclip.renderers.pdf_renderer import render_pdf_bytes
 
-SUPPORTED_FORMATS = {"md", "json"}
+SUPPORTED_FORMATS = {"md", "json", "html", "pdf"}
 SUPPORTED_FETCHERS = {"http", "browser"}
 
 
@@ -59,11 +61,17 @@ class WebclipService:
             raise ValueError(msg)
 
         document = await self.extract(url)
-        artifacts: dict[str, str] = {}
+        artifacts: dict[str, str | bytes] = {}
         if "md" in output_formats:
             artifacts["index.md"] = render_markdown(document, include_comments=include_comments)
         if "json" in output_formats:
             artifacts["source.json"] = render_document_json(document) + "\n"
+        if "html" in output_formats or "pdf" in output_formats:
+            rendered_html = render_html(document, include_comments=include_comments)
+            if "html" in output_formats:
+                artifacts["print.html"] = rendered_html
+            if "pdf" in output_formats:
+                artifacts["article.pdf"] = await render_pdf_bytes(rendered_html)
 
         writer = FilesystemOutput(base_dir)
         output = writer.write(

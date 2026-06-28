@@ -25,7 +25,7 @@ def test_adapters_list() -> None:
 
 
 def test_save_rejects_unsupported_format() -> None:
-    result = runner.invoke(app, ["save", "https://example.org", "--format", "pdf"])
+    result = runner.invoke(app, ["save", "https://example.org", "--format", "xml"])
     assert result.exit_code == 2
 
 

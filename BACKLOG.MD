@@ -19,8 +19,8 @@
 
 - [x] Implement Markdown renderer.
 - [x] Implement JSON renderer.
-- [ ] Implement HTML renderer.
-- [ ] Implement PDF renderer (via Playwright print).
+- [x] Implement HTML renderer.
+- [x] Implement PDF renderer (via Playwright print).
 - [x] Implement filesystem output target.
 - [ ] Implement filesystem and Obsidian output targets.
 
