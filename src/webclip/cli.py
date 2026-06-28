@@ -10,7 +10,9 @@ from rich.console import Console
 from rich.table import Table
 
 from webclip.auth import profile_dir_for_site, resolve_login_url, run_auth_session
+from webclip.config import AppConfig, load_config
 from webclip.diagnostics import run_doctor
+from webclip.exceptions import ConfigurationError
 from webclip.models import Document
 from webclip.outputs.filesystem import FilesystemOutput
 from webclip.registry import AdapterRegistry
@@ -31,33 +33,55 @@ console = Console()
 @app.command()
 def save(
     url: str,
-    output_format: Annotated[str, typer.Option("--format")] = "md",
-    fetcher: Annotated[str, typer.Option("--fetcher")] = "http",
-    with_comments: Annotated[bool, typer.Option("--with-comments")] = True,
-    theme: Annotated[str, typer.Option("--theme")] = "readable",
+    output_format: Annotated[str | None, typer.Option("--format")] = None,
+    fetcher: Annotated[str | None, typer.Option("--fetcher")] = None,
+    with_comments: Annotated[
+        bool | None,
+        typer.Option("--with-comments/--without-comments"),
+    ] = None,
+    theme: Annotated[str | None, typer.Option("--theme")] = None,
     vault: Annotated[Path | None, typer.Option("--vault")] = None,
     directory: Annotated[str | None, typer.Option("--directory")] = None,
     auth_site: Annotated[str | None, typer.Option("--auth-site")] = None,
+    config_path: Annotated[Path | None, typer.Option("--config")] = None,
 ) -> None:
-    formats = _parse_formats(output_format)
-    fetcher_kind = _parse_fetcher(fetcher)
-    rendered_theme = _parse_theme(theme)
-    base_dir = vault or Path.cwd()
-    directory_template = directory or "Clippings/{site}/{slug}"
-    profile_dir = profile_dir_for_site(auth_site) if auth_site else None
-    service = WebclipService(fetcher_kind=fetcher_kind, profile_dir=profile_dir)
+    config = _load_runtime_config(config_path)
+    output_format_value = output_format or ",".join(config.rendering.formats)
+    fetcher_value = fetcher or config.cli.fetcher
+    theme_value = theme or config.rendering.theme
+    include_comments = with_comments if with_comments is not None else config.cli.with_comments
+    resolved_auth_site = auth_site or config.cli.auth_site
+
+    formats = _parse_formats(output_format_value)
+    fetcher_kind = _parse_fetcher(fetcher_value)
+    rendered_theme = _parse_theme(theme_value)
+    base_dir = vault or config.paths.vault or Path.cwd()
+    directory_template = directory or config.paths.directory_template
+    profile_dir = profile_dir_for_site(resolved_auth_site) if resolved_auth_site else None
+    service = WebclipService(
+        fetcher_kind=fetcher_kind,
+        profile_dir=profile_dir,
+        assets_dir_name=config.assets.assets_dir,
+        asset_max_retries=config.assets.max_retries,
+        asset_continue_on_error=config.assets.continue_on_error,
+    )
     result = asyncio.run(
         service.save(
             url=url,
             output_formats=formats,
             base_dir=base_dir,
             directory_template=directory_template,
-            include_comments=with_comments,
+            include_comments=include_comments,
             use_obsidian_output=vault is not None,
             theme=rendered_theme,
         )
     )
     console.print(f"[green]Saved:[/green] {result.output.output_dir}")
+    console.print(f"Assets downloaded: {result.downloaded_assets}")
+    if result.failed_assets:
+        console.print(f"[yellow]Assets failed:[/yellow] {len(result.failed_assets)}")
+        for failed in result.failed_assets[:5]:
+            console.print(f"  - {failed}")
     for file_path in result.output.written_files:
         console.print(f"  - {file_path}")
 
@@ -65,17 +89,30 @@ def save(
 @app.command()
 def update(
     archive_path: Path,
-    mode: Annotated[str, typer.Option("--mode")] = "merge",
+    mode: Annotated[str | None, typer.Option("--mode")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
-    theme: Annotated[str, typer.Option("--theme")] = "readable",
-    fetcher: Annotated[str, typer.Option("--fetcher")] = "http",
+    theme: Annotated[str | None, typer.Option("--theme")] = None,
+    fetcher: Annotated[str | None, typer.Option("--fetcher")] = None,
     auth_site: Annotated[str | None, typer.Option("--auth-site")] = None,
+    config_path: Annotated[Path | None, typer.Option("--config")] = None,
 ) -> None:
-    update_mode = _parse_update_mode(mode)
-    fetcher_kind = _parse_fetcher(fetcher)
-    rendered_theme = _parse_theme(theme)
-    profile_dir = profile_dir_for_site(auth_site) if auth_site else None
-    service = WebclipService(fetcher_kind=fetcher_kind, profile_dir=profile_dir)
+    config = _load_runtime_config(config_path)
+    mode_value = mode or config.cli.update_mode
+    fetcher_value = fetcher or config.cli.fetcher
+    theme_value = theme or config.rendering.theme
+    resolved_auth_site = auth_site or config.cli.auth_site
+
+    update_mode = _parse_update_mode(mode_value)
+    fetcher_kind = _parse_fetcher(fetcher_value)
+    rendered_theme = _parse_theme(theme_value)
+    profile_dir = profile_dir_for_site(resolved_auth_site) if resolved_auth_site else None
+    service = WebclipService(
+        fetcher_kind=fetcher_kind,
+        profile_dir=profile_dir,
+        assets_dir_name=config.assets.assets_dir,
+        asset_max_retries=config.assets.max_retries,
+        asset_continue_on_error=config.assets.continue_on_error,
+    )
     result = asyncio.run(
         service.update(
             archive_path=archive_path,
@@ -86,6 +123,12 @@ def update(
     )
     action = "Planned files" if dry_run else "Updated files"
     console.print(f"{action}:")
+    if not dry_run:
+        console.print(f"Assets downloaded: {result.downloaded_assets}")
+        if result.failed_assets:
+            console.print(f"[yellow]Assets failed:[/yellow] {len(result.failed_assets)}")
+            for failed in result.failed_assets[:5]:
+                console.print(f"  - {failed}")
     for file_path in result.files:
         console.print(f"  - {file_path}")
     console.print(f"Added comments: {result.added_comments}")
@@ -94,11 +137,16 @@ def update(
 @app.command()
 def inspect(
     url: str,
-    fetcher: Annotated[str, typer.Option("--fetcher")] = "http",
+    fetcher: Annotated[str | None, typer.Option("--fetcher")] = None,
     auth_site: Annotated[str | None, typer.Option("--auth-site")] = None,
+    config_path: Annotated[Path | None, typer.Option("--config")] = None,
 ) -> None:
-    fetcher_kind = _parse_fetcher(fetcher)
-    profile_dir = profile_dir_for_site(auth_site) if auth_site else None
+    config = _load_runtime_config(config_path)
+    fetcher_value = fetcher or config.cli.fetcher
+    resolved_auth_site = auth_site or config.cli.auth_site
+
+    fetcher_kind = _parse_fetcher(fetcher_value)
+    profile_dir = profile_dir_for_site(resolved_auth_site) if resolved_auth_site else None
     service = WebclipService(fetcher_kind=fetcher_kind, profile_dir=profile_dir)
     result = asyncio.run(service.inspect(url))
     console.print(f"Matched adapter: {result.adapter_name}")
@@ -127,23 +175,36 @@ def auth(
 @app.command()
 def render(
     source: Path,
-    output_format: Annotated[str, typer.Option("--format")] = "md",
+    output_format: Annotated[str | None, typer.Option("--format")] = None,
     output_dir: Annotated[Path | None, typer.Option("--output-dir")] = None,
-    with_comments: Annotated[bool, typer.Option("--with-comments")] = True,
-    theme: Annotated[str, typer.Option("--theme")] = "readable",
+    with_comments: Annotated[
+        bool | None,
+        typer.Option("--with-comments/--without-comments"),
+    ] = None,
+    theme: Annotated[str | None, typer.Option("--theme")] = None,
+    config_path: Annotated[Path | None, typer.Option("--config")] = None,
 ) -> None:
-    formats = _parse_formats(output_format)
-    rendered_theme = _parse_theme(theme)
+    config = _load_runtime_config(config_path)
+    output_format_value = output_format or ",".join(config.rendering.formats)
+    theme_value = theme or config.rendering.theme
+    include_comments = with_comments if with_comments is not None else config.cli.with_comments
+
+    formats = _parse_formats(output_format_value)
+    rendered_theme = _parse_theme(theme_value)
     source_json, default_output_dir = _resolve_render_source(source)
     document = Document.model_validate(loads(source_json.read_text(encoding="utf-8")))
     target_dir = output_dir or default_output_dir
 
-    service = WebclipService()
+    service = WebclipService(
+        assets_dir_name=config.assets.assets_dir,
+        asset_max_retries=config.assets.max_retries,
+        asset_continue_on_error=config.assets.continue_on_error,
+    )
     artifacts = asyncio.run(
         service.render_document(
             document=document,
             output_formats=formats,
-            include_comments=with_comments,
+            include_comments=include_comments,
             theme=rendered_theme,
         )
     )
@@ -234,6 +295,13 @@ def _resolve_render_source(source: Path) -> tuple[Path, Path]:
         return source_json, source
     msg = f"Expected source.json at: {source_json}"
     raise typer.BadParameter(msg)
+
+
+def _load_runtime_config(override: Path | None = None) -> AppConfig:
+    try:
+        return load_config(override)
+    except ConfigurationError as error:
+        raise typer.BadParameter(str(error)) from error
 
 
 if __name__ == "__main__":

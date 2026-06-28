@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Protocol
 from urllib.parse import urlparse
 
+from webclip.exceptions import AssetFetchError
 from webclip.models import Asset, Document
 
 _MIME_TO_EXT = {
@@ -22,16 +23,19 @@ class AssetDownloadResult:
     document: Document
     artifacts: dict[str, bytes]
     url_map: dict[str, str]
+    failed_urls: list[str]
 
 
 async def localize_document_assets(
     document: Document,
     fetch_asset: AssetFetcher,
     assets_dir_name: str = "assets",
+    continue_on_error: bool = True,
 ) -> AssetDownloadResult:
     artifacts: dict[str, bytes] = {}
     url_map: dict[str, str] = {}
-    updated_assets: list[Asset] = []
+    failed_urls: list[str] = []
+    per_url_update: dict[str, Asset] = {}
 
     seen_urls: set[str] = set()
     index = 1
@@ -40,25 +44,40 @@ async def localize_document_assets(
         if source_url in seen_urls:
             continue
         seen_urls.add(source_url)
-        content, mime = await fetch_asset(source_url)
+        try:
+            content, mime = await fetch_asset(source_url)
+        except AssetFetchError as error:
+            failed_urls.append(source_url)
+            if not continue_on_error:
+                msg = f"Failed to download asset: {source_url}"
+                raise ValueError(msg) from error
+            continue
         extension = _pick_extension(source_url, mime)
         filename = f"asset-{index:03d}{extension}"
         index += 1
         relative_path = str(Path(assets_dir_name) / filename)
         url_map[source_url] = relative_path
         artifacts[relative_path] = content
-        updated_assets.append(
-            asset.model_copy(
-                update={
-                    "local_path": relative_path,
-                    "mime": mime,
-                    "sha256": sha256(content).hexdigest(),
-                }
-            )
+        per_url_update[source_url] = asset.model_copy(
+            update={
+                "local_path": relative_path,
+                "mime": mime,
+                "sha256": sha256(content).hexdigest(),
+            }
         )
 
+    updated_assets: list[Asset] = []
+    for asset in document.assets:
+        source_url = str(asset.source_url)
+        updated_assets.append(per_url_update.get(source_url, asset))
+
     updated_document = document.model_copy(update={"assets": updated_assets}, deep=True)
-    return AssetDownloadResult(document=updated_document, artifacts=artifacts, url_map=url_map)
+    return AssetDownloadResult(
+        document=updated_document,
+        artifacts=artifacts,
+        url_map=url_map,
+        failed_urls=failed_urls,
+    )
 
 
 class AssetFetcher(Protocol):

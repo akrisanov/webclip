@@ -10,6 +10,8 @@ uv sync
 uv run playwright install chromium
 ```
 
+Optional config file: `~/.config/webclip/config.toml` (or `WEBCLIP_CONFIG_PATH`).
+
 ## Quick start
 
 Save a page as Markdown + JSON:
@@ -100,6 +102,33 @@ Modes:
 - `replace` — fully recreate generated files.
 
 Themes (`--theme` for `save`/`update`): `readable`, `serif`, `dark`.
+
+## Configuration defaults
+
+Example `~/.config/webclip/config.toml`:
+
+```toml
+[paths]
+vault = "/Users/you/Documents/Obsidian/Main"
+directory_template = "Clippings/{site}/{slug}"
+
+[rendering]
+formats = ["md", "json", "html"]
+theme = "serif"
+
+[cli]
+fetcher = "http"
+auth_site = "vas3k"
+with_comments = true
+update_mode = "merge"
+
+[assets]
+assets_dir = "assets"
+max_retries = 2
+continue_on_error = true
+```
+
+CLI flags still override config values.
 
 ## Useful commands
 

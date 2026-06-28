@@ -5,6 +5,7 @@ import pytest
 from pydantic import HttpUrl, TypeAdapter
 from pytest import MonkeyPatch
 
+from webclip.exceptions import AssetFetchError
 from webclip.models import Asset, BlockType, ContentBlock, Document, ExtractionMetadata, Metadata
 from webclip.service import WebclipService
 
@@ -68,3 +69,32 @@ async def test_save_downloads_assets_and_localizes_links(
     assert "assets/asset-001.png" in markdown
     assert 'src="assets/asset-001.png"' in html
     assert '"local_path": "assets/asset-001.png"' in source_json
+
+
+@pytest.mark.asyncio
+async def test_save_reports_failed_assets_and_continues(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    async def fake_extract(self, url: str) -> Document:
+        return _image_document()
+
+    async def failing_fetch_asset(self, url: str) -> tuple[bytes, str | None]:
+        raise AssetFetchError("boom")
+
+    monkeypatch.setattr(WebclipService, "extract", fake_extract)
+    monkeypatch.setattr(WebclipService, "_fetch_asset", failing_fetch_asset)
+
+    service = WebclipService(fetcher_kind="http", asset_continue_on_error=True)
+    result = await service.save(
+        url="https://example.org/post/1",
+        output_formats={"md", "json"},
+        base_dir=tmp_path,
+        directory_template="Clippings/{site}/{slug}",
+        include_comments=True,
+    )
+
+    assert result.downloaded_assets == 0
+    assert result.failed_assets == ["https://cdn.example.org/image.png"]
+    markdown = (result.output.output_dir / "index.md").read_text(encoding="utf-8")
+    assert "https://cdn.example.org/image.png" in markdown

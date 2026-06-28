@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from json import loads
 from pathlib import Path
 
 import httpx
 
 from webclip.assets.downloader import localize_document_assets
+from webclip.exceptions import AssetFetchError
 from webclip.fetchers.base import Fetcher, FetchRequest
 from webclip.fetchers.http import HttpFetcher
 from webclip.fetchers.playwright import PlaywrightFetcher
@@ -28,6 +29,8 @@ SUPPORTED_UPDATE_MODES = {"append", "merge", "replace"}
 class SaveResult:
     document: Document
     output: WriteResult
+    downloaded_assets: int = 0
+    failed_assets: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -50,6 +53,8 @@ class UpdateResult:
     dry_run: bool
     files: list[Path]
     added_comments: int
+    downloaded_assets: int = 0
+    failed_assets: list[str] = field(default_factory=list)
 
 
 class WebclipService:
@@ -58,10 +63,16 @@ class WebclipService:
         registry: AdapterRegistry | None = None,
         fetcher_kind: str = "http",
         profile_dir: Path | None = None,
+        assets_dir_name: str = "assets",
+        asset_max_retries: int = 2,
+        asset_continue_on_error: bool = True,
     ) -> None:
         self.registry = registry or AdapterRegistry()
         self.fetcher = self._build_fetcher(fetcher_kind=fetcher_kind, profile_dir=profile_dir)
         self.fetcher_kind = fetcher_kind
+        self.assets_dir_name = assets_dir_name
+        self.asset_max_retries = max(asset_max_retries, 0)
+        self.asset_continue_on_error = asset_continue_on_error
 
     async def save(
         self,
@@ -81,7 +92,12 @@ class WebclipService:
             document=document,
             directory_template=directory_template,
         )
-        localized = await localize_document_assets(document, fetch_asset=self._fetch_asset)
+        localized = await localize_document_assets(
+            document,
+            fetch_asset=self._fetch_asset,
+            assets_dir_name=self.assets_dir_name,
+            continue_on_error=self.asset_continue_on_error,
+        )
         artifacts = await self.render_document(
             document=localized.document,
             output_formats=output_formats,
@@ -96,7 +112,12 @@ class WebclipService:
             output_dir=output_dir,
             artifacts=artifacts,
         )
-        return SaveResult(document=localized.document, output=output)
+        return SaveResult(
+            document=localized.document,
+            output=output,
+            downloaded_assets=len(localized.artifacts),
+            failed_assets=localized.failed_urls,
+        )
 
     async def render_document(
         self,
@@ -165,10 +186,15 @@ class WebclipService:
             localized = await localize_document_assets(
                 document_to_write,
                 fetch_asset=self._fetch_asset,
+                assets_dir_name=self.assets_dir_name,
+                continue_on_error=self.asset_continue_on_error,
             )
             document_to_write = localized.document
             localized_artifacts = localized.artifacts
             asset_url_map = localized.url_map
+            failed_assets = localized.failed_urls
+        else:
+            failed_assets = []
 
         artifacts = await self.render_document(
             document=document_to_write,
@@ -189,6 +215,8 @@ class WebclipService:
                 dry_run=True,
                 files=files,
                 added_comments=len(added_comment_ids),
+                downloaded_assets=0,
+                failed_assets=[],
             )
 
         archive_path.mkdir(parents=True, exist_ok=True)
@@ -209,6 +237,8 @@ class WebclipService:
             dry_run=False,
             files=files,
             added_comments=len(added_comment_ids),
+            downloaded_assets=len(localized_artifacts),
+            failed_assets=failed_assets,
         )
 
     async def inspect(self, url: str) -> InspectResult:
@@ -308,17 +338,27 @@ class WebclipService:
 
     async def _fetch_asset(self, url: str) -> tuple[bytes, str | None]:
         headers = {"User-Agent": "webclip/0.1 (+https://local.cli)"}
+        attempts = self.asset_max_retries + 1
         async with httpx.AsyncClient(
             follow_redirects=True,
             timeout=30.0,
             headers=headers,
         ) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            mime = response.headers.get("content-type")
-            if mime is not None:
-                mime = mime.split(";", 1)[0].strip().lower()
-            return response.content, mime
+            for attempt in range(attempts):
+                try:
+                    response = await client.get(url)
+                    response.raise_for_status()
+                except httpx.HTTPError as error:
+                    if attempt + 1 >= attempts:
+                        msg = f"Asset download failed for {url}: {error}"
+                        raise AssetFetchError(msg) from error
+                    continue
+                mime = response.headers.get("content-type")
+                if mime is not None:
+                    mime = mime.split(";", 1)[0].strip().lower()
+                return response.content, mime
+        msg = f"Asset download failed for {url}"
+        raise AssetFetchError(msg)
 
     def _asset_map_from_document(self, document: Document) -> dict[str, str]:
         mapping: dict[str, str] = {}
