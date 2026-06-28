@@ -28,6 +28,11 @@ def test_save_rejects_unsupported_format() -> None:
     assert result.exit_code == 2
 
 
+def test_save_rejects_unsupported_fetcher() -> None:
+    result = runner.invoke(app, ["save", "https://example.org", "--fetcher", "playwright"])
+    assert result.exit_code == 2
+
+
 def test_save_writes_report_with_mocked_service(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
     from datetime import UTC, datetime
 
@@ -66,3 +71,20 @@ def test_save_writes_report_with_mocked_service(tmp_path: Path, monkeypatch: Mon
     result = runner.invoke(app, ["save", "https://example.org", "--vault", str(tmp_path)])
     assert result.exit_code == 0
     assert "Saved:" in result.stdout
+
+
+def test_auth_uses_profile_and_known_login_url(monkeypatch: MonkeyPatch) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_auth(site: str, login_url: str, profile_dir: Path) -> None:
+        captured["site"] = site
+        captured["login_url"] = login_url
+        captured["profile_dir"] = str(profile_dir)
+
+    monkeypatch.setattr("webclip.cli.run_auth_session", fake_auth)
+    result = runner.invoke(app, ["auth", "vas3k"])
+
+    assert result.exit_code == 0
+    assert captured["site"] == "vas3k"
+    assert captured["login_url"] == "https://vas3k.club/auth/login/"
+    assert "profiles/vas3k" in captured["profile_dir"]

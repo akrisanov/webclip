@@ -31,3 +31,6 @@ class AppConfig(BaseModel):
 def default_config_path() -> Path:
     return Path.home() / ".config" / "webclip" / "config.toml"
 
+
+def default_profiles_dir() -> Path:
+    return Path.home() / ".config" / "webclip" / "profiles"

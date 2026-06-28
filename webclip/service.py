@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from webclip.fetchers.base import FetchRequest
+from webclip.fetchers.base import Fetcher, FetchRequest
 from webclip.fetchers.http import HttpFetcher
+from webclip.fetchers.playwright import PlaywrightFetcher
 from webclip.models import Document
 from webclip.outputs.filesystem import FilesystemOutput, WriteResult
 from webclip.registry import AdapterRegistry
@@ -12,6 +13,7 @@ from webclip.renderers.json_renderer import render_document_json
 from webclip.renderers.markdown import render_markdown
 
 SUPPORTED_FORMATS = {"md", "json"}
+SUPPORTED_FETCHERS = {"http", "browser"}
 
 
 @dataclass(frozen=True)
@@ -36,10 +38,12 @@ class WebclipService:
     def __init__(
         self,
         registry: AdapterRegistry | None = None,
-        fetcher: HttpFetcher | None = None,
+        fetcher_kind: str = "http",
+        profile_dir: Path | None = None,
     ) -> None:
         self.registry = registry or AdapterRegistry()
-        self.fetcher = fetcher or HttpFetcher()
+        self.fetcher = self._build_fetcher(fetcher_kind=fetcher_kind, profile_dir=profile_dir)
+        self.fetcher_kind = fetcher_kind
 
     async def save(
         self,
@@ -79,7 +83,7 @@ class WebclipService:
             comments=len(document.comments),
             images=len(document.assets),
             nested_comment_depth=0,
-            authentication_required=False,
+            authentication_required=self.fetcher_kind == "browser",
         )
 
     async def extract(self, url: str) -> Document:
@@ -89,3 +93,11 @@ class WebclipService:
         document.extraction.fetcher_name = self.fetcher.name
         document.extraction.adapter_name = adapter.name
         return document
+
+    def _build_fetcher(self, fetcher_kind: str, profile_dir: Path | None) -> Fetcher:
+        if fetcher_kind == "http":
+            return HttpFetcher()
+        if fetcher_kind == "browser":
+            return PlaywrightFetcher(profile_dir=profile_dir, headless=True)
+        msg = f"Unsupported fetcher '{fetcher_kind}'"
+        raise ValueError(msg)

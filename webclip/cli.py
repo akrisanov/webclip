@@ -8,8 +8,9 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from webclip.auth import profile_dir_for_site, resolve_login_url, run_auth_session
 from webclip.registry import AdapterRegistry
-from webclip.service import SUPPORTED_FORMATS, WebclipService
+from webclip.service import SUPPORTED_FETCHERS, SUPPORTED_FORMATS, WebclipService
 
 app = typer.Typer(help="Extensible web clipping CLI for Obsidian")
 adapters_app = typer.Typer(help="Manage and inspect registered adapters")
@@ -21,14 +22,18 @@ console = Console()
 def save(
     url: str,
     output_format: Annotated[str, typer.Option("--format")] = "md",
+    fetcher: Annotated[str, typer.Option("--fetcher")] = "http",
     with_comments: Annotated[bool, typer.Option("--with-comments")] = True,
     vault: Annotated[Path | None, typer.Option("--vault")] = None,
     directory: Annotated[str | None, typer.Option("--directory")] = None,
+    auth_site: Annotated[str | None, typer.Option("--auth-site")] = None,
 ) -> None:
     formats = _parse_formats(output_format)
+    fetcher_kind = _parse_fetcher(fetcher)
     base_dir = vault or Path.cwd()
     directory_template = directory or "Clippings/{site}/{slug}"
-    service = WebclipService()
+    profile_dir = profile_dir_for_site(auth_site) if auth_site else None
+    service = WebclipService(fetcher_kind=fetcher_kind, profile_dir=profile_dir)
     result = asyncio.run(
         service.save(
             url=url,
@@ -55,8 +60,14 @@ def update(
 
 
 @app.command()
-def inspect(url: str) -> None:
-    service = WebclipService()
+def inspect(
+    url: str,
+    fetcher: Annotated[str, typer.Option("--fetcher")] = "http",
+    auth_site: Annotated[str | None, typer.Option("--auth-site")] = None,
+) -> None:
+    fetcher_kind = _parse_fetcher(fetcher)
+    profile_dir = profile_dir_for_site(auth_site) if auth_site else None
+    service = WebclipService(fetcher_kind=fetcher_kind, profile_dir=profile_dir)
     result = asyncio.run(service.inspect(url))
     console.print(f"Matched adapter: {result.adapter_name}")
     console.print(f"Fetcher: {result.fetcher_name}")
@@ -69,10 +80,16 @@ def inspect(url: str) -> None:
 
 
 @app.command()
-def auth(site: str) -> None:
-    console.print("[yellow]Not implemented yet:[/yellow] auth flow")
-    console.print({"site": site})
-    raise typer.Exit(code=1)
+def auth(
+    site: str,
+    login_url: Annotated[str | None, typer.Option("--login-url")] = None,
+) -> None:
+    resolved_login_url = resolve_login_url(site, login_url)
+    profile_dir = profile_dir_for_site(site)
+    console.print(f"Profile: {profile_dir}")
+    console.print(f"Opening: {resolved_login_url}")
+    run_auth_session(site=site, login_url=resolved_login_url, profile_dir=profile_dir)
+    console.print("[green]Authentication profile saved.[/green]")
 
 
 @app.command()
@@ -111,6 +128,16 @@ def _parse_formats(raw_value: str) -> set[str]:
             f"Unsupported format(s): {unsupported_values}. Supported: {supported}"
         )
     return formats
+
+
+def _parse_fetcher(raw_value: str) -> str:
+    fetcher_kind = raw_value.strip().lower()
+    if fetcher_kind not in SUPPORTED_FETCHERS:
+        supported = ", ".join(sorted(SUPPORTED_FETCHERS))
+        raise typer.BadParameter(
+            f"Unsupported fetcher: {fetcher_kind}. Supported: {supported}"
+        )
+    return fetcher_kind
 
 
 if __name__ == "__main__":

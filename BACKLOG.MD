@@ -11,7 +11,7 @@
 ## Stage 2 — Fetch and extraction
 
 - [x] Implement HTTP fetcher.
-- [ ] Implement Playwright fetcher with persistent auth profile.
+- [x] Implement Playwright fetcher with persistent auth profile.
 - [x] Implement generic adapter.
 - [ ] Implement `vas3k.club` adapter for article/comments/assets extraction.
 

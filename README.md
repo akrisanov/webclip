@@ -23,3 +23,10 @@ Using just:
 ```bash
 just check
 ```
+
+## Browser auth and authenticated fetch
+
+```bash
+uv run webclip auth vas3k
+uv run webclip save "https://vas3k.club/post/1941225/" --fetcher browser --auth-site vas3k
+```
