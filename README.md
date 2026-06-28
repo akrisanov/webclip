@@ -18,6 +18,12 @@ Save a page as Markdown + JSON:
 uv run webclip save "https://example.org" --format md,json
 ```
 
+Save with book-style HTML/PDF typography theme:
+
+```bash
+uv run webclip save "https://example.org" --format html,pdf --theme serif
+```
+
 Save directly into an Obsidian vault:
 
 ```bash
@@ -80,6 +86,8 @@ Modes:
 - `append` — add only new comments.
 - `merge` — regenerate current output files from the latest source.
 - `replace` — fully recreate generated files.
+
+Themes (`--theme` for `save`/`update`): `readable`, `serif`, `dark`.
 
 ## Useful commands
 

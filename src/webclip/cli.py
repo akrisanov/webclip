@@ -11,6 +11,7 @@ from rich.table import Table
 from webclip.auth import profile_dir_for_site, resolve_login_url, run_auth_session
 from webclip.diagnostics import run_doctor
 from webclip.registry import AdapterRegistry
+from webclip.renderers.html_renderer import SUPPORTED_THEMES
 from webclip.service import (
     SUPPORTED_FETCHERS,
     SUPPORTED_FORMATS,
@@ -30,12 +31,14 @@ def save(
     output_format: Annotated[str, typer.Option("--format")] = "md",
     fetcher: Annotated[str, typer.Option("--fetcher")] = "http",
     with_comments: Annotated[bool, typer.Option("--with-comments")] = True,
+    theme: Annotated[str, typer.Option("--theme")] = "readable",
     vault: Annotated[Path | None, typer.Option("--vault")] = None,
     directory: Annotated[str | None, typer.Option("--directory")] = None,
     auth_site: Annotated[str | None, typer.Option("--auth-site")] = None,
 ) -> None:
     formats = _parse_formats(output_format)
     fetcher_kind = _parse_fetcher(fetcher)
+    rendered_theme = _parse_theme(theme)
     base_dir = vault or Path.cwd()
     directory_template = directory or "Clippings/{site}/{slug}"
     profile_dir = profile_dir_for_site(auth_site) if auth_site else None
@@ -48,6 +51,7 @@ def save(
             directory_template=directory_template,
             include_comments=with_comments,
             use_obsidian_output=vault is not None,
+            theme=rendered_theme,
         )
     )
     console.print(f"[green]Saved:[/green] {result.output.output_dir}")
@@ -60,11 +64,13 @@ def update(
     archive_path: Path,
     mode: Annotated[str, typer.Option("--mode")] = "merge",
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
+    theme: Annotated[str, typer.Option("--theme")] = "readable",
     fetcher: Annotated[str, typer.Option("--fetcher")] = "http",
     auth_site: Annotated[str | None, typer.Option("--auth-site")] = None,
 ) -> None:
     update_mode = _parse_update_mode(mode)
     fetcher_kind = _parse_fetcher(fetcher)
+    rendered_theme = _parse_theme(theme)
     profile_dir = profile_dir_for_site(auth_site) if auth_site else None
     service = WebclipService(fetcher_kind=fetcher_kind, profile_dir=profile_dir)
     result = asyncio.run(
@@ -72,6 +78,7 @@ def update(
             archive_path=archive_path,
             mode=update_mode,
             dry_run=dry_run,
+            theme=rendered_theme,
         )
     )
     action = "Planned files" if dry_run else "Updated files"
@@ -183,6 +190,14 @@ def _parse_update_mode(raw_value: str) -> str:
             f"Unsupported update mode: {update_mode}. Supported: {supported}"
         )
     return update_mode
+
+
+def _parse_theme(raw_value: str) -> str:
+    theme = raw_value.strip().lower()
+    if theme not in SUPPORTED_THEMES:
+        supported = ", ".join(sorted(SUPPORTED_THEMES))
+        raise typer.BadParameter(f"Unsupported theme: {theme}. Supported: {supported}")
+    return theme
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ from pathlib import Path
 
 from pydantic import HttpUrl, TypeAdapter
 
-from webclip.models import BlockType, ContentBlock, Document, ExtractionMetadata, Metadata
+from webclip.models import BlockType, Comment, ContentBlock, Document, ExtractionMetadata, Metadata
 from webclip.outputs.filesystem import FilesystemOutput
 from webclip.outputs.obsidian import ObsidianOutput
 from webclip.renderers.html_renderer import render_html
@@ -29,6 +29,17 @@ def _sample_document() -> Document:
                 caption="image",
             ),
         ],
+        comments=[
+            Comment(
+                comment_id="c1",
+                body=[ContentBlock(type=BlockType.paragraph, text="Top comment")],
+            ),
+            Comment(
+                comment_id="c2",
+                parent_id="c1",
+                body=[ContentBlock(type=BlockType.paragraph, text="Reply comment")],
+            ),
+        ],
         extraction=ExtractionMetadata(
             adapter_name="generic",
             fetcher_name="http",
@@ -42,6 +53,14 @@ def test_render_html_contains_title_and_sections() -> None:
     assert "<h1>Sample Title</h1>" in html
     assert "<h2>Article</h2>" in html
     assert "Paragraph" in html
+    assert 'class="theme-readable"' in html
+    assert "comment-card" in html
+    assert "comment-level-1" in html
+
+
+def test_render_html_applies_theme() -> None:
+    html = render_html(_sample_document(), include_comments=True, theme="serif")
+    assert 'class="theme-serif"' in html
 
 
 def test_filesystem_output_writes_text_and_binary(tmp_path: Path) -> None:

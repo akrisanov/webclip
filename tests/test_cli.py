@@ -35,6 +35,11 @@ def test_save_rejects_unsupported_fetcher() -> None:
     assert result.exit_code == 2
 
 
+def test_save_rejects_unsupported_theme() -> None:
+    result = runner.invoke(app, ["save", "https://example.org", "--theme", "retro"])
+    assert result.exit_code == 2
+
+
 def test_update_rejects_unsupported_mode() -> None:
     result = runner.invoke(app, ["update", "/tmp/archive", "--mode", "invalid"])
     assert result.exit_code == 2
@@ -55,6 +60,7 @@ def test_save_writes_report_with_mocked_service(tmp_path: Path, monkeypatch: Mon
         directory_template: str,
         include_comments: bool,
         use_obsidian_output: bool = False,
+        theme: str = "readable",
     ) -> SaveResult:
         output_dir = base_dir / "Clippings" / "example.org" / "test"
         return SaveResult(
@@ -117,6 +123,7 @@ def test_update_reports_planned_files(monkeypatch: MonkeyPatch, tmp_path: Path) 
         archive_path: Path,
         mode: str,
         dry_run: bool = False,
+        theme: str = "readable",
     ) -> UpdateResult:
         return UpdateResult(
             mode=mode,

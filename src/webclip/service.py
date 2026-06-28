@@ -11,7 +11,7 @@ from webclip.models import Asset, Document
 from webclip.outputs.filesystem import FilesystemOutput, WriteResult
 from webclip.outputs.obsidian import ObsidianOutput
 from webclip.registry import AdapterRegistry
-from webclip.renderers.html_renderer import render_html
+from webclip.renderers.html_renderer import SUPPORTED_THEMES, render_html
 from webclip.renderers.json_renderer import render_document_json
 from webclip.renderers.markdown import render_markdown
 from webclip.renderers.pdf_renderer import render_pdf_bytes
@@ -68,10 +68,14 @@ class WebclipService:
         directory_template: str,
         include_comments: bool,
         use_obsidian_output: bool = False,
+        theme: str = "readable",
     ) -> SaveResult:
         unsupported = output_formats - SUPPORTED_FORMATS
         if unsupported:
             msg = f"Unsupported output format(s): {', '.join(sorted(unsupported))}"
+            raise ValueError(msg)
+        if theme not in SUPPORTED_THEMES:
+            msg = f"Unsupported theme '{theme}'"
             raise ValueError(msg)
 
         document = await self.extract(url)
@@ -79,6 +83,7 @@ class WebclipService:
             document=document,
             output_formats=output_formats,
             include_comments=include_comments,
+            theme=theme,
         )
 
         writer = ObsidianOutput(base_dir) if use_obsidian_output else FilesystemOutput(base_dir)
@@ -94,9 +99,13 @@ class WebclipService:
         archive_path: Path,
         mode: str,
         dry_run: bool = False,
+        theme: str = "readable",
     ) -> UpdateResult:
         if mode not in SUPPORTED_UPDATE_MODES:
             msg = f"Unsupported update mode '{mode}'"
+            raise ValueError(msg)
+        if theme not in SUPPORTED_THEMES:
+            msg = f"Unsupported theme '{theme}'"
             raise ValueError(msg)
 
         source_path = archive_path / "source.json"
@@ -133,6 +142,7 @@ class WebclipService:
             document=document_to_write,
             output_formats=output_formats,
             include_comments=True,
+            theme=theme,
         )
 
         files = [archive_path / name for name in artifacts]
@@ -200,6 +210,7 @@ class WebclipService:
         document: Document,
         output_formats: set[str],
         include_comments: bool,
+        theme: str,
     ) -> dict[str, str | bytes]:
         artifacts: dict[str, str | bytes] = {}
         if "md" in output_formats:
@@ -207,7 +218,7 @@ class WebclipService:
         if "json" in output_formats:
             artifacts["source.json"] = render_document_json(document) + "\n"
         if "html" in output_formats or "pdf" in output_formats:
-            rendered_html = render_html(document, include_comments=include_comments)
+            rendered_html = render_html(document, include_comments=include_comments, theme=theme)
             if "html" in output_formats:
                 artifacts["print.html"] = rendered_html
             if "pdf" in output_formats:
