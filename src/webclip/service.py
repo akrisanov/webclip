@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from json import loads
 from pathlib import Path
 
+import httpx
+
+from webclip.assets.downloader import localize_document_assets
 from webclip.fetchers.base import Fetcher, FetchRequest
 from webclip.fetchers.http import HttpFetcher
 from webclip.fetchers.playwright import PlaywrightFetcher
@@ -73,20 +76,27 @@ class WebclipService:
         self._validate_render_options(output_formats=output_formats, theme=theme)
 
         document = await self.extract(url)
-        artifacts = await self.render_document(
+        writer = ObsidianOutput(base_dir) if use_obsidian_output else FilesystemOutput(base_dir)
+        output_dir = writer.resolve_output_dir(
             document=document,
+            directory_template=directory_template,
+        )
+        localized = await localize_document_assets(document, fetch_asset=self._fetch_asset)
+        artifacts = await self.render_document(
+            document=localized.document,
             output_formats=output_formats,
             include_comments=include_comments,
             theme=theme,
+            asset_url_map=localized.url_map,
+            base_href=f"{output_dir.as_uri()}/",
         )
+        artifacts = {**localized.artifacts, **artifacts}
 
-        writer = ObsidianOutput(base_dir) if use_obsidian_output else FilesystemOutput(base_dir)
-        output = writer.write(
-            document=document,
-            directory_template=directory_template,
+        output = writer.write_to_directory(
+            output_dir=output_dir,
             artifacts=artifacts,
         )
-        return SaveResult(document=document, output=output)
+        return SaveResult(document=localized.document, output=output)
 
     async def render_document(
         self,
@@ -94,6 +104,8 @@ class WebclipService:
         output_formats: set[str],
         include_comments: bool = True,
         theme: str = "readable",
+        asset_url_map: dict[str, str] | None = None,
+        base_href: str | None = None,
     ) -> dict[str, str | bytes]:
         self._validate_render_options(output_formats=output_formats, theme=theme)
         return await self._build_artifacts(
@@ -101,6 +113,8 @@ class WebclipService:
             output_formats=output_formats,
             include_comments=include_comments,
             theme=theme,
+            asset_url_map=asset_url_map or self._asset_map_from_document(document),
+            base_href=base_href,
         )
 
     async def update(
@@ -145,12 +159,26 @@ class WebclipService:
             document_to_write = latest_document
 
         output_formats = self._detect_formats(archive_path)
+        localized_artifacts: dict[str, bytes] = {}
+        asset_url_map = self._asset_map_from_document(document_to_write)
+        if not dry_run:
+            localized = await localize_document_assets(
+                document_to_write,
+                fetch_asset=self._fetch_asset,
+            )
+            document_to_write = localized.document
+            localized_artifacts = localized.artifacts
+            asset_url_map = localized.url_map
+
         artifacts = await self.render_document(
             document=document_to_write,
             output_formats=output_formats,
             include_comments=True,
             theme=theme,
+            asset_url_map=asset_url_map,
+            base_href=f"{archive_path.as_uri()}/",
         )
+        artifacts = {**localized_artifacts, **artifacts}
 
         files = [archive_path / name for name in artifacts]
         if dry_run:
@@ -218,14 +246,26 @@ class WebclipService:
         output_formats: set[str],
         include_comments: bool,
         theme: str,
+        asset_url_map: dict[str, str],
+        base_href: str | None,
     ) -> dict[str, str | bytes]:
         artifacts: dict[str, str | bytes] = {}
         if "md" in output_formats:
-            artifacts["index.md"] = render_markdown(document, include_comments=include_comments)
+            artifacts["index.md"] = render_markdown(
+                document,
+                include_comments=include_comments,
+                asset_url_map=asset_url_map,
+            )
         if "json" in output_formats:
             artifacts["source.json"] = render_document_json(document) + "\n"
         if "html" in output_formats or "pdf" in output_formats:
-            rendered_html = render_html(document, include_comments=include_comments, theme=theme)
+            rendered_html = render_html(
+                document,
+                include_comments=include_comments,
+                theme=theme,
+                asset_url_map=asset_url_map,
+                base_href=base_href,
+            )
             if "html" in output_formats:
                 artifacts["print.html"] = rendered_html
             if "pdf" in output_formats:
@@ -265,3 +305,24 @@ class WebclipService:
         if theme not in SUPPORTED_THEMES:
             msg = f"Unsupported theme '{theme}'"
             raise ValueError(msg)
+
+    async def _fetch_asset(self, url: str) -> tuple[bytes, str | None]:
+        headers = {"User-Agent": "webclip/0.1 (+https://local.cli)"}
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=30.0,
+            headers=headers,
+        ) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            mime = response.headers.get("content-type")
+            if mime is not None:
+                mime = mime.split(";", 1)[0].strip().lower()
+            return response.content, mime
+
+    def _asset_map_from_document(self, document: Document) -> dict[str, str]:
+        mapping: dict[str, str] = {}
+        for asset in document.assets:
+            if asset.local_path is not None:
+                mapping[str(asset.source_url)] = asset.local_path
+        return mapping

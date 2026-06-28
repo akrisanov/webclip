@@ -16,6 +16,9 @@ _TEMPLATE = _ENV.from_string(
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title }}</title>
+  {% if base_href %}
+  <base href="{{ base_href }}">
+  {% endif %}
   <style>
     :root {
       --bg: #fcfcfb;
@@ -155,12 +158,20 @@ _TEMPLATE = _ENV.from_string(
 )
 
 
-def render_html(document: Document, include_comments: bool = True, theme: str = "readable") -> str:
+def render_html(
+    document: Document,
+    include_comments: bool = True,
+    theme: str = "readable",
+    asset_url_map: dict[str, str] | None = None,
+    base_href: str | None = None,
+) -> str:
     if theme not in SUPPORTED_THEMES:
         msg = f"Unsupported HTML theme: {theme}"
         raise ValueError(msg)
-    article_html = [_render_block_html(block) for block in document.content]
-    comments_html = _render_comments(document.comments)
+    article_html = [
+        _render_block_html(block, asset_url_map=asset_url_map) for block in document.content
+    ]
+    comments_html = _render_comments(document.comments, asset_url_map=asset_url_map)
     return _TEMPLATE.render(
         title=document.metadata.title,
         source_url=str(document.metadata.source_url),
@@ -168,10 +179,14 @@ def render_html(document: Document, include_comments: bool = True, theme: str = 
         comments_html=comments_html,
         include_comments=include_comments,
         theme=theme,
+        base_href=base_href,
     )
 
 
-def _render_comments(comments: list[Comment]) -> list[dict[str, str | int | list[str] | None]]:
+def _render_comments(
+    comments: list[Comment],
+    asset_url_map: dict[str, str] | None,
+) -> list[dict[str, str | int | list[str] | None]]:
     depth_map = _build_depth_map(comments)
     rendered: list[dict[str, str | int | list[str] | None]] = []
     for comment in comments:
@@ -184,7 +199,10 @@ def _render_comments(comments: list[Comment]) -> list[dict[str, str | int | list
                 "timestamp": timestamp,
                 "score": comment.score,
                 "level": depth,
-                "body": [_render_block_html(block) for block in comment.body],
+                "body": [
+                    _render_block_html(block, asset_url_map=asset_url_map)
+                    for block in comment.body
+                ],
             }
         )
     return rendered
@@ -208,7 +226,7 @@ def _build_depth_map(comments: list[Comment]) -> dict[str, int]:
     return depth_map
 
 
-def _render_block_html(block: ContentBlock) -> str:
+def _render_block_html(block: ContentBlock, asset_url_map: dict[str, str] | None) -> str:
     if block.type == BlockType.heading:
         level = min(max(block.level or 2, 1), 6)
         text = escape(block.text or "")
@@ -219,5 +237,11 @@ def _render_block_html(block: ContentBlock) -> str:
         return f"<pre><code>{escape(block.text or '')}</code></pre>"
     if block.type == BlockType.image and block.url is not None:
         caption = f' alt="{escape(block.caption)}"' if block.caption else ""
-        return f'<img src="{escape(str(block.url))}"{caption}>'
+        source_url = str(block.url)
+        localized = (
+            asset_url_map.get(source_url, source_url)
+            if asset_url_map is not None
+            else source_url
+        )
+        return f'<img src="{escape(localized)}"{caption}>'
     return f"<p>{escape(block.text or '')}</p>"

@@ -175,6 +175,8 @@ def test_render_from_source_json_writes_files(tmp_path: Path, monkeypatch: Monke
         output_formats: set[str],
         include_comments: bool = True,
         theme: str = "readable",
+        asset_url_map: dict[str, str] | None = None,
+        base_href: str | None = None,
     ) -> dict[str, str | bytes]:
         return {"index.md": "# Rendered\n", "source.json": "{}\n"}
 

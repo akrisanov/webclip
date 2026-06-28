@@ -53,6 +53,8 @@ Default output structure:
             ├── source.json
             ├── print.html        # when --format includes html
             ├── article.pdf       # when --format includes pdf
+            ├── assets/
+            │   └── asset-001.png
             └── notes.md
 ```
 
@@ -60,6 +62,7 @@ Notes:
 
 - `notes.md` is created automatically for Obsidian flow.
 - On `update`, generated files are refreshed according to mode, while `notes.md` is preserved.
+- Image assets are downloaded into `assets/`, and links in Markdown/HTML/PDF are localized.
 
 Inspect extraction results:
 

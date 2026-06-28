@@ -3,7 +3,11 @@ from __future__ import annotations
 from webclip.models import BlockType, Document
 
 
-def render_markdown(document: Document, include_comments: bool = True) -> str:
+def render_markdown(
+    document: Document,
+    include_comments: bool = True,
+    asset_url_map: dict[str, str] | None = None,
+) -> str:
     lines: list[str] = [
         "---",
         f'title: "{document.metadata.title}"',
@@ -25,6 +29,7 @@ def render_markdown(document: Document, include_comments: bool = True) -> str:
                 block.level,
                 str(block.url) if block.url else None,
                 block.caption,
+                asset_url_map,
             )
         )
         lines.append("")
@@ -41,6 +46,7 @@ def render_markdown(document: Document, include_comments: bool = True) -> str:
                     body_block.level,
                     str(body_block.url) if body_block.url else None,
                     body_block.caption,
+                    asset_url_map,
                 )
                 for entry in rendered:
                     lines.append(f"  {entry}")
@@ -55,6 +61,7 @@ def _render_block(
     level: int | None,
     url: str | None,
     caption: str | None,
+    asset_url_map: dict[str, str] | None,
 ) -> list[str]:
     if block_type == BlockType.heading:
         heading_level = min(max(level or 2, 1), 6)
@@ -65,5 +72,6 @@ def _render_block(
         return ["```", text or "", "```"]
     if block_type == BlockType.image and url:
         alt = caption or ""
-        return [f"![{alt}]({url})"]
+        target_url = asset_url_map.get(url, url) if asset_url_map is not None else url
+        return [f"![{alt}]({target_url})"]
     return [text or ""]
