@@ -70,16 +70,10 @@ class WebclipService:
         use_obsidian_output: bool = False,
         theme: str = "readable",
     ) -> SaveResult:
-        unsupported = output_formats - SUPPORTED_FORMATS
-        if unsupported:
-            msg = f"Unsupported output format(s): {', '.join(sorted(unsupported))}"
-            raise ValueError(msg)
-        if theme not in SUPPORTED_THEMES:
-            msg = f"Unsupported theme '{theme}'"
-            raise ValueError(msg)
+        self._validate_render_options(output_formats=output_formats, theme=theme)
 
         document = await self.extract(url)
-        artifacts = await self._build_artifacts(
+        artifacts = await self.render_document(
             document=document,
             output_formats=output_formats,
             include_comments=include_comments,
@@ -94,6 +88,21 @@ class WebclipService:
         )
         return SaveResult(document=document, output=output)
 
+    async def render_document(
+        self,
+        document: Document,
+        output_formats: set[str],
+        include_comments: bool = True,
+        theme: str = "readable",
+    ) -> dict[str, str | bytes]:
+        self._validate_render_options(output_formats=output_formats, theme=theme)
+        return await self._build_artifacts(
+            document=document,
+            output_formats=output_formats,
+            include_comments=include_comments,
+            theme=theme,
+        )
+
     async def update(
         self,
         archive_path: Path,
@@ -104,9 +113,7 @@ class WebclipService:
         if mode not in SUPPORTED_UPDATE_MODES:
             msg = f"Unsupported update mode '{mode}'"
             raise ValueError(msg)
-        if theme not in SUPPORTED_THEMES:
-            msg = f"Unsupported theme '{theme}'"
-            raise ValueError(msg)
+        self._validate_render_options(output_formats=SUPPORTED_FORMATS, theme=theme)
 
         source_path = archive_path / "source.json"
         if not source_path.exists():
@@ -138,7 +145,7 @@ class WebclipService:
             document_to_write = latest_document
 
         output_formats = self._detect_formats(archive_path)
-        artifacts = await self._build_artifacts(
+        artifacts = await self.render_document(
             document=document_to_write,
             output_formats=output_formats,
             include_comments=True,
@@ -249,3 +256,12 @@ class WebclipService:
         for asset in new_assets:
             by_url.setdefault(str(asset.source_url), asset)
         return list(by_url.values())
+
+    def _validate_render_options(self, output_formats: set[str], theme: str) -> None:
+        unsupported = output_formats - SUPPORTED_FORMATS
+        if unsupported:
+            msg = f"Unsupported output format(s): {', '.join(sorted(unsupported))}"
+            raise ValueError(msg)
+        if theme not in SUPPORTED_THEMES:
+            msg = f"Unsupported theme '{theme}'"
+            raise ValueError(msg)

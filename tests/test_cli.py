@@ -143,3 +143,47 @@ def test_update_reports_planned_files(monkeypatch: MonkeyPatch, tmp_path: Path) 
     assert result.exit_code == 0
     assert "Planned files" in result.stdout
     assert "Added comments: 2" in result.stdout
+
+
+def test_render_from_source_json_writes_files(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
+    from datetime import UTC, datetime
+
+    from webclip.models import Document, ExtractionMetadata, Metadata
+
+    source_json = tmp_path / "source.json"
+    source_json.write_text(
+        Document(
+            doc_id="id",
+            slug="sample",
+            metadata=Metadata(
+                site="example.org",
+                title="Example",
+                source_url=HTTP_URL.validate_python("https://example.org/post"),
+            ),
+            extraction=ExtractionMetadata(
+                adapter_name="generic",
+                fetcher_name="http",
+                extracted_at=datetime.now(UTC),
+            ),
+        ).model_dump_json(indent=2, exclude_none=True),
+        encoding="utf-8",
+    )
+
+    async def fake_render_document(
+        self,
+        document: Document,
+        output_formats: set[str],
+        include_comments: bool = True,
+        theme: str = "readable",
+    ) -> dict[str, str | bytes]:
+        return {"index.md": "# Rendered\n", "source.json": "{}\n"}
+
+    monkeypatch.setattr("webclip.cli.WebclipService.render_document", fake_render_document)
+    out_dir = tmp_path / "rendered"
+    result = runner.invoke(
+        app,
+        ["render", str(source_json), "--format", "md,json", "--output-dir", str(out_dir)],
+    )
+    assert result.exit_code == 0
+    assert (out_dir / "index.md").exists()
+    assert "Rendered:" in result.stdout

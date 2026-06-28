@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from json import loads
 from pathlib import Path
 from typing import Annotated
 
@@ -10,6 +11,8 @@ from rich.table import Table
 
 from webclip.auth import profile_dir_for_site, resolve_login_url, run_auth_session
 from webclip.diagnostics import run_doctor
+from webclip.models import Document
+from webclip.outputs.filesystem import FilesystemOutput
 from webclip.registry import AdapterRegistry
 from webclip.renderers.html_renderer import SUPPORTED_THEMES
 from webclip.service import (
@@ -122,10 +125,33 @@ def auth(
 
 
 @app.command()
-def render(source: Path, output_format: Annotated[str, typer.Option("--format")] = "md") -> None:
-    console.print("[yellow]Not implemented yet:[/yellow] render pipeline")
-    console.print({"source": str(source), "format": output_format})
-    raise typer.Exit(code=1)
+def render(
+    source: Path,
+    output_format: Annotated[str, typer.Option("--format")] = "md",
+    output_dir: Annotated[Path | None, typer.Option("--output-dir")] = None,
+    with_comments: Annotated[bool, typer.Option("--with-comments")] = True,
+    theme: Annotated[str, typer.Option("--theme")] = "readable",
+) -> None:
+    formats = _parse_formats(output_format)
+    rendered_theme = _parse_theme(theme)
+    source_json, default_output_dir = _resolve_render_source(source)
+    document = Document.model_validate(loads(source_json.read_text(encoding="utf-8")))
+    target_dir = output_dir or default_output_dir
+
+    service = WebclipService()
+    artifacts = asyncio.run(
+        service.render_document(
+            document=document,
+            output_formats=formats,
+            include_comments=with_comments,
+            theme=rendered_theme,
+        )
+    )
+    writer = FilesystemOutput(Path.cwd())
+    result = writer.write_to_directory(target_dir, artifacts)
+    console.print(f"[green]Rendered:[/green] {result.output_dir}")
+    for file_path in result.written_files:
+        console.print(f"  - {file_path}")
 
 
 @adapters_app.command("list")
@@ -198,6 +224,16 @@ def _parse_theme(raw_value: str) -> str:
         supported = ", ".join(sorted(SUPPORTED_THEMES))
         raise typer.BadParameter(f"Unsupported theme: {theme}. Supported: {supported}")
     return theme
+
+
+def _resolve_render_source(source: Path) -> tuple[Path, Path]:
+    if source.exists() and source.is_file():
+        return source, source.parent
+    source_json = source / "source.json"
+    if source_json.exists():
+        return source_json, source
+    msg = f"Expected source.json at: {source_json}"
+    raise typer.BadParameter(msg)
 
 
 if __name__ == "__main__":

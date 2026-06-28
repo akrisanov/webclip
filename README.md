@@ -67,6 +67,15 @@ Inspect extraction results:
 uv run webclip inspect "https://example.org"
 ```
 
+Re-render from an existing `source.json` archive:
+
+```bash
+uv run webclip render ./Clippings/example.org/example-domain/source.json \
+  --format md,html,pdf \
+  --theme serif \
+  --output-dir ./Clippings/example.org/example-domain
+```
+
 ## Authentication (for protected pages)
 
 ```bash

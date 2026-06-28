@@ -41,3 +41,19 @@ class FilesystemOutput:
                 target.write_text(content, encoding="utf-8")
             written_files.append(target)
         return WriteResult(output_dir=output_dir, written_files=written_files)
+
+    def write_to_directory(
+        self,
+        output_dir: Path,
+        artifacts: dict[str, str | bytes],
+    ) -> WriteResult:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        written_files: list[Path] = []
+        for filename, content in artifacts.items():
+            target = output_dir / filename
+            if isinstance(content, bytes):
+                target.write_bytes(content)
+            else:
+                target.write_text(content, encoding="utf-8")
+            written_files.append(target)
+        return WriteResult(output_dir=output_dir, written_files=written_files)
